@@ -73,10 +73,13 @@ def main():
     lr = 2e-5
     batch_size = 64
     log_interval = 10
+
+    # Output
     output_dir = Path(
-        'result/roberta-classical-chinese-base-char', 
-        f'lr{lr}-bs{batch_size}',
+        'result/roberta-classical-chinese-base-char',
+        f'lr{lr}-bs{batch_size}-ep{num_epochs}',
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Train
     train_collate_fn = DataCollatorForLanguageModeling(
@@ -91,6 +94,10 @@ def main():
         batch_size=batch_size,
         log_interval=log_interval
     )
+
+    texts = load_texts()
+    train_data, dev_data, test_data = get_dataset(tokenizer, texts)
+
     trainer.train(train_data, dev_data)
 
     # Test
