@@ -4,4 +4,4 @@ __pycache__
 tokenization/tokenizer
 result
 data/*.json
-
+tokenizer/
