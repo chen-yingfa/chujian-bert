@@ -1,3 +1,4 @@
+from argparse import ArgumentParser, Namespace
 import random
 from typing import List, Tuple
 from pathlib import Path
@@ -32,9 +33,11 @@ def get_dataset(
     return train_data, dev_data, test_data
 
 
-def load_texts(min_len: int = 2) -> list:
-    TEXTS_PATH = '../data/sequences/seq_texts.json'
-    texts = load_json(TEXTS_PATH)
+def load_texts(
+    texts_path: Path,
+    min_len: int = 2,
+) -> List[str]:
+    texts = load_json(texts_path)
     texts = [seq['text'] for seq in texts]
     print(f'Loaded {len(texts)} sequences.')
     texts = [t for t in texts if len(t) > 0]  # Many sequences are empty
@@ -55,14 +58,15 @@ def train(model):
 
 
 def main():
-    texts = load_texts()
+    TEXTS_PATH = Path('/data/private/chenyingfa/chujian/sequences/seq_texts.json')
+    texts = load_texts(TEXTS_PATH)
     print('====== examples ======')
     for i in range(12):
         if len(texts[i]) > 0:
             print(i, texts[i])
 
     MODEL_NAME = "KoichiYasuoka/roberta-classical-chinese-base-char"
-    TOKENIZER_PATH = 'tokenization/tokenizer'
+    TOKENIZER_PATH = 'tokenizer'
     print('Loading tokenizer and model...')
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
     model = AutoModelForMaskedLM.from_pretrained(MODEL_NAME)
@@ -95,7 +99,7 @@ def main():
         log_interval=log_interval
     )
 
-    texts = load_texts()
+    texts = load_texts(TEXTS_PATH)
     train_data, dev_data, test_data = get_dataset(tokenizer, texts)
 
     trainer.train(train_data, dev_data)

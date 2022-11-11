@@ -28,6 +28,7 @@ def iter_seqs(seqs: List[List[str]]):
         for c in seq:
             yield c
 
+
 word_cnt = defaultdict(int)
 for c in iter_seqs(seqs):
     word_cnt[c] += 1
