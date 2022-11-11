@@ -1,6 +1,6 @@
-# Chujian MLM
+# Chujian BERT
 
-Use BERT to perform Masked Language Model (MLM) on Chujian text. 
+Use BERT to perform Masked Language Model (MLM) on Chujian text.
 
 This model uses a BERT pretrained on classical Chinese texts, and finetuned on our Chujian data.
 
