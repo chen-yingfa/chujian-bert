@@ -1,11 +1,19 @@
 import json
 from pathlib import Path
+from typing import List
+import random
 
 
 def dump_json(data, path):
     json.dump(
         data, open(path, "w", encoding="utf8"), indent=4, ensure_ascii=False
     )
+
+
+def dump_jsonl(data, path):
+    with open(path, "w", encoding="utf8") as f:
+        for line in data:
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
 
 
 def get_sequences(meta_file: Path) -> list:
@@ -40,29 +48,85 @@ def get_sequences(meta_file: Path) -> list:
     return seqs
 
 
-SRC_DIR = Path("/data/private/chenyingfa/chujian/data")
-DST_DIR = Path("/data/private/chenyingfa/chujian/sequences")
-meta_file = SRC_DIR / "chujian.json"
+def split(seqs: list):
+    random.shuffle(seqs)
+    split_idx = int(len(seqs) * 0.9)
+    train = seqs[:split_idx]
+    test = seqs[split_idx:]
+    return train, test
 
-print(f'Getting sequences from {meta_file}')
-seqs = get_sequences(meta_file)
-num_images = sum(len(seq) for seq in seqs)
 
-print(f"Found {len(seqs)} sequences")
-print(f"Found {num_images} images")
-print("======")
+def create_test_examples(
+    seqs: List[List[str]], 
+    mask_rate=0.15, 
+    min_cnt: int = 1,
+):
+    '''
+    Turn:
+        ['○（莊）', '公', '䎽（問）', '爲']
+    into:
+        {
+            "sequence": '○（莊）', '[MASK]', '䎽（問）', '爲'],
+            "labels": ['公'],
+        }
+    '''
+    examples = []
+    for seq in seqs:
+        n = len(seq)
+        indices = list(range(n))
+        mask_indices = random.sample(indices, max(min_cnt, int(n * mask_rate)))
+        labels = []
+        for idx in mask_indices:
+            labels.append(seq[idx])
+            seq[idx] = "[MASK]"
+        examples.append({
+            "sequence": seq,
+            "labels": labels,
+        })
+    return examples
 
-seqs_file = DST_DIR / 'sequences.json'
-print(f"Dumping to {seqs_file}")
-DST_DIR.mkdir(exist_ok=True, parents=True)
-dump_json(seqs, seqs_file)
 
-seq_texts = []
-for seq in seqs:
-    seq_texts.append({
-        "slip_image": seq["slip_image"],
-        "text": [word['glyph'] for word in seq["sequence"]]
-    })
-seq_texts_file = DST_DIR / 'seq_texts.json'
-print(f'Dumping seq texts to {seq_texts_file}')
-dump_json(seq_texts, seq_texts_file)
+if __name__ == '__main__':
+    # SRC_DIR = Path("/data/private/chenyingfa/chujian/data")
+    # DST_DIR = Path("/data/private/chenyingfa/chujian/sequences")
+    SRC_DIR = Path("E:/donny/code/school/research/chujian/data/data")
+    DST_DIR = Path("E:/donny/code/school/research/chujian/data/sequences")
+    meta_file = SRC_DIR / "chujian.json"
+
+    print(f'Getting sequences from {meta_file}')
+    seqs = get_sequences(meta_file)
+    num_images = sum(len(seq) for seq in seqs)
+
+    print(f"Found {len(seqs)} sequences")
+    print(f"Found {num_images} images")
+    print("======")
+
+    seqs_file = DST_DIR / 'all_sequences.json'
+    print(f"Dumping to {seqs_file}")
+    DST_DIR.mkdir(exist_ok=True, parents=True)
+    dump_json(seqs, seqs_file)
+
+    seqs = [
+        {
+            "slip_image": seq["slip_image"],
+            "text": [word['glyph'] for word in seq["sequence"]]
+        } for seq in seqs
+    ]
+    min_len = 2
+    seqs = [s for s in seqs if len(s['text']) >= 2]
+    print(
+        f"Found {len(seqs)} sequences with at least {min_len} (labeled) words")
+
+    seqs_file = DST_DIR / 'sequences.json'
+    print(f"Dumping to {seqs_file}")
+    dump_json(seqs, seqs_file)
+
+    # Split data into train and test
+    random.seed(0)
+    texts = [seq['text'] for seq in seqs]
+    train_texts, test_texts = split(texts)
+    test_texts = create_test_examples(test_texts)
+    print(test_texts[:10])
+    print(f'Dumping train and test data to {DST_DIR}')
+    dump_jsonl(train_texts, DST_DIR / 'train.jsonl')
+    dump_jsonl(test_texts, DST_DIR / 'test.jsonl')
