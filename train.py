@@ -64,6 +64,7 @@ def main():
     for i in range(12):
         if len(texts[i]) > 0:
             print(i, texts[i])
+    print('======================')
 
     MODEL_NAME = "KoichiYasuoka/roberta-classical-chinese-base-char"
     TOKENIZER_PATH = 'tokenizer'
@@ -75,7 +76,7 @@ def main():
     # Hyperparameters
     num_epochs = 2
     lr = 2e-5
-    batch_size = 64
+    batch_size = 2
     log_interval = 10
 
     # Output
@@ -93,7 +94,7 @@ def main():
     trainer = Trainer(
         model,
         output_dir,
-        train_collate_fn=train_collate_fn,
+        train_data_collator=train_collate_fn,
         num_epochs=num_epochs,
         batch_size=batch_size,
         log_interval=log_interval
@@ -103,8 +104,6 @@ def main():
     train_data, dev_data, test_data = get_dataset(tokenizer, texts)
 
     trainer.train(train_data, dev_data)
-
-    # Test
 
 
 if __name__ == '__main__':

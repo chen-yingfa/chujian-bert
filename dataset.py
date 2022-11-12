@@ -9,25 +9,26 @@ class ChujianMLMDataset(Dataset):
         self,
         texts: List[str],
         tokenizer,
-        max_length: int = 512,
+        block_size: int = 10,
     ):
         self.texts = texts
         self.tokenizer = tokenizer
-        self.max_length = max_length
+        self.block_size = block_size
 
-        self.inputs: Dict[str, torch.Tensor] = self.tokenizer(
+        batch_encoding: dict = self.tokenizer(
             texts,
-            max_length=self.max_length,
-            padding='max_length',
+            add_special_tokens=True,
             truncation=True,
-            return_tensors='pt',
+            max_length=block_size,
         )
+        self.examples: List[int] = batch_encoding["input_ids"]
+        self.examples = [
+            {"input_ids": torch.tensor(e, dtype=torch.long)}
+            for e in self.examples
+        ]
 
-    def __len__(self):
-        return len(self.texts)
+    def __len__(self) -> int:
+        return len(self.examples)
 
-    def __getitem__(self, idx: int):
-        return {
-            key: self.inputs[key][idx]
-            for key in ['input_ids', 'attention_mask']
-        }
+    def __getitem__(self, i: int) -> Dict[str, torch.Tensor]:
+        return self.examples[i]

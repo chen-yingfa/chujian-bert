@@ -6,7 +6,6 @@ from typing import Callable
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
-from transformers import DataCollatorForLanguageModeling
 
 
 class Trainer:
@@ -14,7 +13,7 @@ class Trainer:
         self,
         model: nn.Module,
         output_dir: Path,
-        train_collate_fn: Callable,
+        train_data_collator: Callable,
         num_epochs: int = 2,
         batch_size: int = 4,
         lr: float = 0.005,
@@ -29,6 +28,7 @@ class Trainer:
         self.lr = lr
         self.log_interval = log_interval
         self.device = device
+        self.train_data_collator = train_data_collator
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(
@@ -75,12 +75,15 @@ class Trainer:
         self.log("Epoch done")
 
     def train_step(self, batch: tuple):
-        inputs, labels = batch
-        inputs = inputs.to(self.device)
-        labels = labels.to(self.device)
+        for key in batch:
+            batch[key] = batch[key].to(self.device)
+            print(key, batch[key])
         # Forward pass
-        logits = self.model(inputs)
-        loss = self.loss_fn(logits, labels)
+        outputs = self.model(**batch)
+        # loss = self.loss_fn(logits, labels)
+        print(outputs)
+        exit()
+        loss = outputs.loss
         self.total_loss += loss.item()
 
         # Backward pass
@@ -134,6 +137,7 @@ class Trainer:
         self.train_loader = DataLoader(
             train_data,
             batch_size=self.batch_size,
+            collate_fn=self.train_data_collator,
             shuffle=True,
         )
         if do_resume and self.has_ckpt():
