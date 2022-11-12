@@ -1,3 +1,4 @@
+import random
 from pathlib import Path
 import time
 import json
@@ -77,19 +78,19 @@ class Trainer:
 
     def train_step(self, batch: dict):
         inputs = {key: t.to(self.device) for key, t in batch.items()}
-        # Forward pass
-        outputs = self.model(**inputs)
-        loss = outputs.loss
-        self.total_loss += loss.item()
+        if torch.all(inputs["labels"] == -100):
+            # Some examples are not mask by chance, skip them
+            loss = 0.0
+        else:
+            # Forward pass
+            outputs = self.model(**inputs)
+            loss = outputs.loss
+            self.total_loss += loss.item()
 
-        print(loss)
-        print(self.total_loss)
-        exit()
-
-        # Backward pass
-        loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+            # Backward pass
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
 
         self.cur_step += 1
 
@@ -131,10 +132,11 @@ class Trainer:
 
     def train(
         self,
-        train_data: Dataset,
-        dev_data: Dataset,
+        train_data,
+        dev_data=None,
         do_resume: bool = True,
     ):
+        self.set_seed(0)
         self.train_loader = DataLoader(
             train_data,
             batch_size=self.batch_size,
@@ -159,24 +161,21 @@ class Trainer:
 
         while self.cur_ep < self.num_epochs:
             self.train_epoch(self.train_loader)
-            self.save_and_validate(dev_data)
+            ckpt_dir = self.checkpoint()
+            if dev_data is not None:
+                self.evaluate(dev_data, ckpt_dir)
             self.cur_ep += 1
         self.log("====== Training Done ======")
         self.train_log_file.close()
 
-    def save_and_validate(self, dev_data: Dataset):
+    def checkpoint(self) -> Path:
         '''
-        Save current model as a checkpoint to `ckpt_{cur_ep}` then
-        evaluate on dev set.
+        Save current model as a checkpoint to `ckpt_{cur_ep}`
         '''
-        dev_dir = self.output_dir / f"ckpt_{self.cur_ep}"
-        dev_dir.mkdir(exist_ok=True, parents=True)
-        self.save_ckpt(dev_dir)
-
-        result = self.evaluate(dev_data, dev_dir)
-        del result["preds"]
-        result_file = dev_dir / "result.json"
-        json.dump(result, open(result_file, "w", encoding='utf8'), indent=4)
+        ckpt_dir = self.output_dir / f'ckpt_{self.cur_ep}'
+        ckpt_dir.mkdir(exist_ok=True)
+        self.save_ckpt(ckpt_dir)
+        return ckpt_dir
 
     def save_ckpt(self, ckpt_dir: Path):
         print(f"Saving checkpoint to {ckpt_dir}")
@@ -222,7 +221,7 @@ class Trainer:
 
     def evaluate(
         self,
-        dataset: Dataset,
+        dataset,
         output_dir: Path,
     ):
         '''
@@ -232,7 +231,11 @@ class Trainer:
         to load the checkpoint to evaluate on.
         '''
         eval_batch_size = 4 * self.batch_size
-        loader = DataLoader(dataset, batch_size=eval_batch_size, shuffle=False)
+        loader = DataLoader(
+            dataset,
+            batch_size=eval_batch_size,
+            shuffle=False,
+        )
         self.model.eval()
         if self.log_file is None or self.log_file.closed:
             self.logging_test = True
@@ -293,3 +296,8 @@ class Trainer:
             "preds": all_preds,
             "acc": acc,
         }
+
+    def set_seed(self, seed: int):
+        random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)

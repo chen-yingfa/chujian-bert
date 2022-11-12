@@ -1,10 +1,12 @@
-from argparse import ArgumentParser, Namespace
 import random
 from typing import List, Tuple
 from pathlib import Path
 
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-from transformers import DataCollatorForLanguageModeling
+from transformers import (
+    AutoModelForMaskedLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+)
 
 from trainer import Trainer
 from dataset import ChujianMLMDataset
@@ -13,7 +15,7 @@ from data.utils import parse_label
 
 
 def get_dataset(
-    tokenizer: AutoTokenizer,
+    tokenizer,
     texts: List[str]
 ) -> Tuple[ChujianMLMDataset, ChujianMLMDataset, ChujianMLMDataset]:
     random.seed(0)
@@ -58,7 +60,9 @@ def train(model):
 
 
 def main():
-    TEXTS_PATH = Path('/data/private/chenyingfa/chujian/sequences/seq_texts.json')
+    # TEXTS_PATH = Path(
+    # '/data/private/chenyingfa/chujian/sequences/seq_texts.json')
+    TEXTS_PATH = Path('../data/sequences/seq_texts.json')
     texts = load_texts(TEXTS_PATH)
     print('====== examples ======')
     for i in range(12):
@@ -74,9 +78,9 @@ def main():
     model.resize_token_embeddings(len(tokenizer))
 
     # Hyperparameters
-    num_epochs = 2
+    num_epochs = 8
     lr = 2e-5
-    batch_size = 2
+    batch_size = 128
     log_interval = 10
 
     # Output
@@ -87,14 +91,14 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Train
-    train_collate_fn = DataCollatorForLanguageModeling(
+    train_data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer, mlm=True, mlm_probability=0.15
     )
 
     trainer = Trainer(
         model,
         output_dir,
-        train_data_collator=train_collate_fn,
+        train_data_collator=train_data_collator,
         num_epochs=num_epochs,
         batch_size=batch_size,
         log_interval=log_interval
@@ -103,7 +107,10 @@ def main():
     texts = load_texts(TEXTS_PATH)
     train_data, dev_data, test_data = get_dataset(tokenizer, texts)
 
-    trainer.train(train_data, dev_data)
+    trainer.train(train_data)
+
+    test_output_dir = output_dir / 'test'
+    trainer.evaluate(test_data, test_output_dir)
 
 
 if __name__ == '__main__':
