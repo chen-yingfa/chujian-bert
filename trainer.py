@@ -5,6 +5,7 @@ from typing import Callable
 
 import torch
 from torch import nn
+from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader, Dataset
 
 
@@ -30,8 +31,8 @@ class Trainer:
         self.device = device
         self.train_data_collator = train_data_collator
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
+        self.optimizer: Adam = Adam(self.model.parameters(), lr=self.lr)
+        self.scheduler: lr_scheduler.StepLR = lr_scheduler.StepLR(
             self.optimizer,
             step_size=1,
             gamma=lr_gamma,
@@ -74,17 +75,16 @@ class Trainer:
         self.scheduler.step()
         self.log("Epoch done")
 
-    def train_step(self, batch: tuple):
-        for key in batch:
-            batch[key] = batch[key].to(self.device)
-            print(key, batch[key])
+    def train_step(self, batch: dict):
+        inputs = {key: t.to(self.device) for key, t in batch.items()}
         # Forward pass
-        outputs = self.model(**batch)
-        # loss = self.loss_fn(logits, labels)
-        print(outputs)
-        exit()
+        outputs = self.model(**inputs)
         loss = outputs.loss
         self.total_loss += loss.item()
+
+        print(loss)
+        print(self.total_loss)
+        exit()
 
         # Backward pass
         loss.backward()
@@ -93,6 +93,7 @@ class Trainer:
 
         self.cur_step += 1
 
+        # Handle logging
         if self.cur_step % self.log_interval == 0:
             self.log(
                 {
@@ -251,11 +252,13 @@ class Trainer:
         all_labels = []
         with torch.no_grad():
             for step, batch in enumerate(loader):
-                inputs, labels = batch
-                logits = self.model(inputs.to(self.device))
-                loss = self.loss_fn(logits, labels.to(self.device))
-                all_labels += labels.tolist()
-                topk_preds = torch.topk(logits, 10, dim=1)  # (B, k)
+                # inputs, labels = batch
+                inputs = {key: t.to(self.device) for key, t in batch.items()}
+                outputs = self.model(**inputs)
+                loss = outputs.loss
+                # loss = self.loss_fn(logits, labels.to(self.device))
+                all_labels += inputs['labels'].tolist()
+                topk_preds = torch.topk(outputs.logits, 10, dim=1)  # (B, k)
                 all_preds += topk_preds.indices.tolist()
 
                 total_loss += loss.item()
