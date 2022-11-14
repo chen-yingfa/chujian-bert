@@ -1,117 +1,85 @@
-import random
-from typing import List, Tuple
+from typing import List
 from pathlib import Path
+import random
 
-from transformers import (
-    AutoModelForMaskedLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
-)
+from transformers import BertForMaskedLM, BertConfig
+import torch
+import numpy as np
 
 from trainer import Trainer
-from dataset import ChujianMLMDataset
-from utils import load_json
-from data.utils import parse_label
+from data.dataset import ChujianMLMDatasetSmallVocab
+from utils import dump_json, load_json
 
 
-def get_dataset(
-    tokenizer,
-    texts: List[str]
-) -> Tuple[ChujianMLMDataset, ChujianMLMDataset, ChujianMLMDataset]:
-    random.seed(0)
-    split_idx = [int(len(texts) * 0.8), int(len(texts) * 0.9)]
-    print(f'Splitting data into {split_idx}...')
-    print(f'Train size: {split_idx[0]}')
-    print(f'Dev size: {split_idx[1] - split_idx[0]}')
-    print(f'Test size: {len(texts) - split_idx[1]}')
-    random.shuffle(texts)
-    train_texts = texts[:int(split_idx[0])]
-    dev_texts = texts[int(split_idx[0]):int(split_idx[1])]
-    test_texts = texts[int(split_idx[1]):]
-    print('Building dataset...')
-    train_data = ChujianMLMDataset(train_texts, tokenizer)
-    dev_data = ChujianMLMDataset(dev_texts, tokenizer)
-    test_data = ChujianMLMDataset(test_texts, tokenizer)
-    return train_data, dev_data, test_data
-
-
-def load_texts(
-    texts_path: Path,
-    min_len: int = 2,
-) -> List[str]:
-    texts = load_json(texts_path)
-    texts = [seq['text'] for seq in texts]
-    print(f'Loaded {len(texts)} sequences.')
-    texts = [t for t in texts if len(t) > 0]  # Many sequences are empty
-    print(f'# non-empty sequences: {len(texts)}')
-    texts = [t for t in texts if len(t) >= min_len]
-    print(f'Minimum length: {min_len}')
-    print(f'# sequences with enough length: {len(texts)}')
-    texts = [
-        ''.join(
-            [parse_label(c, True, comb_token='…', unk_token='…') for c in seq]
-        ) for seq in texts
-    ]
-    return texts
-
-
-def train(model):
-    pass
+def load_vocab() -> List[str]:
+    glyphs_to_count_file = "../data/glyphs_k-0/glyph_to_count_sorted.json"
+    vocab = load_json(glyphs_to_count_file)
+    return list(vocab.keys())
 
 
 def main():
+    torch.random.manual_seed(0)
+    np.random.seed(0)
+    random.seed(0)
     # TEXTS_PATH = Path(
     # '/data/private/chenyingfa/chujian/sequences/seq_texts.json')
-    TEXTS_PATH = Path('../data/sequences/seq_texts.json')
-    texts = load_texts(TEXTS_PATH)
-    print('====== examples ======')
-    for i in range(12):
-        if len(texts[i]) > 0:
-            print(i, texts[i])
-    print('======================')
+    # TEXTS_PATH = Path('../data/sequences/seq_texts.json')
+    TRAIN_PATH = Path("../data/sequences/train.jsonl")
+    TEST_PATH = Path("../data/sequences/test.jsonl")
 
-    MODEL_NAME = "KoichiYasuoka/roberta-classical-chinese-base-char"
-    TOKENIZER_PATH = 'tokenizer'
-    print('Loading tokenizer and model...')
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
-    model = AutoModelForMaskedLM.from_pretrained(MODEL_NAME)
-    model.resize_token_embeddings(len(tokenizer))
+    print("(Randomly) Initializing model...")
+    config = BertConfig.from_pretrained("configs/roberta-base-config.json")
+    model = BertForMaskedLM(config)
+    # print(model)
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"Number of trainable parameters: {num_params}")
 
     # Hyperparameters
     num_epochs = 8
-    lr = 2e-5
+    lr = 5e-5
     batch_size = 128
     log_interval = 10
+    mode = "train_test"
 
     # Output
     output_dir = Path(
-        'result/roberta-classical-chinese-base-char',
-        f'lr{lr}-bs{batch_size}-ep{num_epochs}',
+        "result",
+        # "temp",
+        "bert_rand_init",
+        f"lr{lr}-bs{batch_size}-ep{num_epochs}",
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Train
-    train_data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm=True, mlm_probability=0.15
-    )
-
     trainer = Trainer(
         model,
         output_dir,
-        train_data_collator=train_data_collator,
         num_epochs=num_epochs,
+        lr=lr,
         batch_size=batch_size,
-        log_interval=log_interval
+        log_interval=log_interval,
     )
 
-    texts = load_texts(TEXTS_PATH)
-    train_data, dev_data, test_data = get_dataset(tokenizer, texts)
+    vocab = load_vocab()
+    if "train" in mode:
+        train_data = ChujianMLMDatasetSmallVocab(
+            vocab, TRAIN_PATH, is_training=True
+        )
+        test_data = ChujianMLMDatasetSmallVocab(
+            vocab, TEST_PATH, is_training=False
+        )
+        trainer.train(train_data, test_data)
+    if "test" in mode:
+        test_output_dir = output_dir / "test"
+        test_output_dir.mkdir(parents=True, exist_ok=True)
+        test_data = ChujianMLMDatasetSmallVocab(
+            vocab, TEST_PATH, is_training=False
+        )
+        result = trainer.evaluate(test_data, test_output_dir)
+        dump_json(result["preds"], test_output_dir / "preds.json")
+        del result["preds"]
+        dump_json(result, test_output_dir / "result.json")
 
-    trainer.train(train_data)
 
-    test_output_dir = output_dir / 'test'
-    trainer.evaluate(test_data, test_output_dir)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

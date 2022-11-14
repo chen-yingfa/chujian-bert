@@ -4,10 +4,13 @@ import time
 import json
 from typing import Callable
 
+from tqdm import tqdm
 import torch
 from torch import nn
 from torch.optim import Adam, lr_scheduler
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
+
+from utils import dump_json
 
 
 class Trainer:
@@ -15,11 +18,11 @@ class Trainer:
         self,
         model: nn.Module,
         output_dir: Path,
-        train_data_collator: Callable,
+        train_data_collator: Callable = None,
         num_epochs: int = 2,
         batch_size: int = 4,
         lr: float = 0.005,
-        lr_gamma: float = 0.7,
+        lr_gamma: float = 0.8,
         log_interval: int = 10,
         device: str = "cuda",
     ):
@@ -59,7 +62,7 @@ class Trainer:
             ]
         }
         args_file = output_dir / "train_args.json"
-        json.dump(train_args, args_file.open("w", encoding='utf8'), indent=4)
+        json.dump(train_args, args_file.open("w", encoding="utf8"), indent=4)
 
     def log(self, *args, **kwargs):
         print(*args, **kwargs)
@@ -70,18 +73,23 @@ class Trainer:
         self.cur_step = 0
         self.total_loss = 0
         self.epoch_start_time = time.time()
-        self.log(f"Start epoch {self.cur_ep}")
+        self.log(f"====== Start epoch {self.cur_ep} ======")
         for batch in train_loader:
             self.train_step(batch)
         self.scheduler.step()
-        self.log("Epoch done")
+        self.log(f"====== Epoch {self.cur_ep} done ======")
 
     def train_step(self, batch: dict):
         inputs = {key: t.to(self.device) for key, t in batch.items()}
         if torch.all(inputs["labels"] == -100):
-            # Some examples are not mask by chance, skip them
+            # Some examples have no masks by chance, skip them
             loss = 0.0
         else:
+            # for key in ['input_ids', 'attention_mask', 'labels']:
+            #     print(key)
+            #     print(inputs[key][:10])
+            # exit()
+
             # Forward pass
             outputs = self.model(**inputs)
             loss = outputs.loss
@@ -91,6 +99,8 @@ class Trainer:
             loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
+
+            self.train_loss_history.append(loss.item())
 
         self.cur_step += 1
 
@@ -119,7 +129,8 @@ class Trainer:
         # +1 because the checkpoint is saved at the end of an epoch
         self.cur_ep = int(ckpt_dir.name.split("_")[-1]) + 1
         self.log_file = open(
-            self.output_dir / "train.log", "a", encoding='utf8')
+            self.output_dir / "train.log", "a", encoding="utf8"
+        )
         self.train_log_file = self.log_file
         self.log(f"\n====== Resuming from {ckpt_dir} ======")
         self.train_start_time = time.time()
@@ -147,17 +158,21 @@ class Trainer:
             self.resume()
         else:
             self.cur_ep = 0
-            self.log_file = open(self.train_log_path, "w", encoding='utf8')
+            self.log_file = open(self.train_log_path, "w", encoding="utf8")
             self.train_log_file = self.log_file
             self.cur_ep = 0
             self.train_start_time = time.time()
 
+        num_params = sum(p.numel() for p in self.model.parameters())
         self.log("====== Training ======")
-        self.log(f"  Num steps: {len(self.train_loader)}")
-        self.log(f"  Num examples: {len(train_data)}")
-        self.log(f"  Num epochs: {self.num_epochs}")
+        self.log(f"  # parameters: {num_params}")
+        self.log(f"  # steps: {len(self.train_loader)}")
+        self.log(f"  # examples: {len(train_data)}")
+        self.log(f"  # epochs: {self.num_epochs}")
         self.log(f"  Batch size: {self.batch_size}")
         self.log(f"  Log interval: {self.log_interval}")
+
+        self.train_loss_history = []
 
         while self.cur_ep < self.num_epochs:
             self.train_epoch(self.train_loader)
@@ -169,12 +184,15 @@ class Trainer:
         self.train_log_file.close()
 
     def checkpoint(self) -> Path:
-        '''
+        """
         Save current model as a checkpoint to `ckpt_{cur_ep}`
-        '''
-        ckpt_dir = self.output_dir / f'ckpt_{self.cur_ep}'
+        """
+        ckpt_dir = self.output_dir / f"ckpt_{self.cur_ep}"
         ckpt_dir.mkdir(exist_ok=True)
         self.save_ckpt(ckpt_dir)
+        dump_json(
+            self.train_loss_history, ckpt_dir / "train_loss_history.json"
+        )
         return ckpt_dir
 
     def save_ckpt(self, ckpt_dir: Path):
@@ -188,10 +206,10 @@ class Trainer:
         torch.save(self.scheduler.state_dict(), scheduler_file)
 
     def load_ckpt(self, ckpt_dir: Path):
-        '''
+        """
         Load checkpoint from a checkpoint directory.
         Will set `self.model`, `self.optimizer`, `self.scheduler`.
-        '''
+        """
         print(f"Loading checkpoint from {ckpt_dir}")
         ckpt_file = ckpt_dir / "ckpt.pt"
         optim_file = ckpt_dir / "optim.pt"
@@ -201,7 +219,7 @@ class Trainer:
         self.scheduler.load_state_dict(torch.load(scheduler_file))
 
     def get_best_ckpt_dir(self) -> Path:
-        '''Load the best checkpoint based on loss.'''
+        """Load the best checkpoint based on loss."""
         ckpt_dirs = self.get_ckpt_dirs()
         if len(ckpt_dirs) == 0:
             raise ValueError("No checkpoint found")
@@ -209,7 +227,7 @@ class Trainer:
         best_loss = float("inf")
         for ckpt_dir in ckpt_dirs[1:]:
             result_file = ckpt_dir / "result.json"
-            result = json.load(open(result_file, "r", encoding='utf8'))
+            result = json.load(open(result_file, "r", encoding="utf8"))
             if best_ckpt_dir is None or result["loss"] < best_loss:
                 best_ckpt_dir = ckpt_dir
                 best_loss = result["loss"]
@@ -223,13 +241,13 @@ class Trainer:
         self,
         dataset,
         output_dir: Path,
-    ):
-        '''
+    ) -> dict:
+        """
         Perform evaluation on `self.model`.
 
         NOTE: During testing, make sure you first call `load_best_ckpt`
         to load the checkpoint to evaluate on.
-        '''
+        """
         eval_batch_size = 4 * self.batch_size
         loader = DataLoader(
             dataset,
@@ -241,14 +259,16 @@ class Trainer:
             self.logging_test = True
             output_dir.mkdir(exist_ok=True, parents=True)
             self.test_log_path = output_dir / "test.log"
-            self.test_log_file = open(self.test_log_path, 'w', encoding='utf8')
+            self.test_log_file = open(self.test_log_path, "w", encoding="utf8")
             self.log_file = self.test_log_file
         else:
             self.logging_test = False
+        self.eval_log_interval = 1
         self.log("====== Evaluating ======")
         self.log(f"Num steps: {len(loader)}")
         self.log(f"Num examples: {len(dataset)}")
         self.log(f"batch_size: {eval_batch_size}")
+        self.log(f"log_interval: {self.log_interval}")
 
         total_loss = 0
         all_preds = []
@@ -258,24 +278,32 @@ class Trainer:
                 # inputs, labels = batch
                 inputs = {key: t.to(self.device) for key, t in batch.items()}
                 outputs = self.model(**inputs)
-                loss = outputs.loss
-                # loss = self.loss_fn(logits, labels.to(self.device))
-                all_labels += inputs['labels'].tolist()
-                topk_preds = torch.topk(outputs.logits, 10, dim=1)  # (B, k)
-                all_preds += topk_preds.indices.tolist()
 
+                # Gather results
+                loss = outputs.loss
+                labels = inputs["labels"]
+                # (L = # unmasked tokens)
+                all_labels += labels[labels != -100].tolist()
+                topk_preds = torch.topk(outputs.logits, 10, dim=2)  # (B, n, k)
+                topk_idxs = topk_preds.indices
+                # Only care about predictions for masked tokens
+                topk_preds = topk_idxs[labels != -100]
+                all_preds += topk_preds.tolist()  # (L, k)
                 total_loss += loss.item()
 
-                if (step + 1) % self.log_interval == 0:
+                # Logging
+                if (step + 1) % self.eval_log_interval == 0:
                     self.log(
                         {
                             "step": step,
                             "loss": total_loss / (step + 1),
                         }
                     )
-
-        preds_file = output_dir / "preds.json"
-        json.dump(all_preds, open(preds_file, "w", encoding='utf8'), indent=4)
+        print("====== Evaluation Done ======")
+        assert len(all_labels) == len(all_preds)
+        print("Dumping predictions...")
+        dump_json(all_preds, output_dir / "preds.json")
+        dump_json(all_labels, output_dir / "labels.json")
         # Compute top-k accuracy
         acc = {}
         for k in [1, 3, 5, 10]:
@@ -284,10 +312,12 @@ class Trainer:
                 if label in preds[:k]:
                     acc[k] += 1
             acc[k] /= len(all_labels)
-        self.log(acc)
-        self.log("loss", total_loss / len(loader))
-        self.log("====== Evaluation Done ======")
-
+        result = {
+            "acc": acc,
+            "loss": total_loss / len(loader),
+        }
+        dump_json(result, output_dir / "result.json")
+        self.log(result)
         if self.logging_test:
             self.test_log_file.close()
 
