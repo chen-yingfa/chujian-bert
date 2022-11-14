@@ -1,9 +1,17 @@
+import json
+from typing import List
+
+
 def parse_label(
     label: str,
     use_comb_token: bool,
     unk_token: str = '[UNK]',
     comb_token: str = '[COMB]',
+    ignore_tokens: List[str] = ['[MASK]'],
 ) -> str:
+    if label in ignore_tokens:
+        return label
+
     # Normalize the glyph label
     RM_STRS = [
         '=', 'None'
@@ -63,3 +71,11 @@ def parse_label(
     if any(c in label for c in DISCARD_CHARS):
         return unk_token
     return label
+
+
+def load_json(path):
+    return json.load(open(path, 'r', encoding='utf-8'))
+
+
+def load_jsonl(path):
+    return [json.loads(line) for line in open(path, 'r', encoding='utf-8')]

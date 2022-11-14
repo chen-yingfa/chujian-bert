@@ -66,22 +66,21 @@ def create_test_examples(
         ['○（莊）', '公', '䎽（問）', '爲']
     into:
         {
-            "sequence": '○（莊）', '[MASK]', '䎽（問）', '爲'],
-            "labels": ['公'],
+            "sequence": ['○（莊）', '[MASK]', '䎽（問）', '爲'],
+            "label": ['○（莊）', '公', '䎽（問）', '爲']
         }
     '''
     examples = []
     for seq in seqs:
+        label = seq[:]  # The unmasked sequence is the label.
         n = len(seq)
         indices = list(range(n))
         mask_indices = random.sample(indices, max(min_cnt, int(n * mask_rate)))
-        labels = []
         for idx in mask_indices:
-            labels.append(seq[idx])
             seq[idx] = "[MASK]"
         examples.append({
             "sequence": seq,
-            "labels": labels,
+            "label": label,
         })
     return examples
 
