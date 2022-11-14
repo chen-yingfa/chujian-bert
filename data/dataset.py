@@ -7,9 +7,26 @@ from torch.utils.data import Dataset
 from .utils import parse_label, load_jsonl
 
 
+def chunk_list(lst: List, chunk_size: int) -> List[List]:
+    """
+    Split a list into chunks of size `chunk_size`.
+    """
+    return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
+
+
+def chunk_2d_list(lst: List[List], chunk_size: int) -> List[List]:
+    """
+    Split a 2D list into chunks of size `chunk_size`.
+    """
+    chunks = []
+    for seq in lst:
+        chunks.extend(chunk_list(seq, chunk_size))
+    return chunks
+
+
 def load_seqs(
     texts_path: Path,
-) -> List[str]:
+) -> List[List[str]]:
     """
     Load sequences from JSONL file, parse labels, and labels that are rare
     or combination of multiple radicals are replaced with '…'.
@@ -18,30 +35,32 @@ def load_seqs(
     texts = [seq["text"] for seq in texts]
     print(f"Loaded {len(texts)} sequences.")
     texts = [
-        "".join(
-            [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
-        )
+        [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
         for seq in texts
     ]
     return texts
 
 
 def get_train_examples(
-    texts: List[str],
+    texts: List[List[str]],
     tokenizer,
-    block_size,
+    context_len: int,
 ) -> List[Dict[str, torch.Tensor]]:
-    print("====== examples ======")
-    for i in range(12):
-        if len(texts[i]) > 0:
-            print(i, texts[i])
-    print("======================")
+    print("====== train examples ======")
+    for i in range(10):
+        print(i, texts[i])
+    print("============================")
+
+    # Chunk sequences into blocks of `block_size` characters
+    chunk_size = context_len - 2  # -2 for [CLS] and [SEP]
+    texts = chunk_2d_list(texts, chunk_size)
+    joined_texts = ["".join(x) for x in texts]
 
     batch_encoding: Dict[str, list] = tokenizer(
-        texts,
+        joined_texts,
         add_special_tokens=True,
         truncation=True,
-        max_length=block_size,
+        max_length=context_len,
     )
     input_ids: List[List[int]] = batch_encoding["input_ids"]
     examples = [
@@ -58,27 +77,22 @@ def load_test_seqs(path: Path):
     print(f"Loaded {len(examples)} test examples.")
     seqs: List[List[str]] = [example["sequence"] for example in examples]
     labels: List[List[str]] = [example["label"] for example in examples]
+    # Don't join glyphs into a string because we need to
+    # know the number of glyphs in each sequence.
     texts = [
-        "".join(
-            [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
-        )
+        [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
         for seq in seqs
     ]
     label_texts = [
-        "".join(
-            [
-                parse_label(c, True, comb_token="…", unk_token="…")
-                for c in label
-            ]
-        )
+        [parse_label(c, True, comb_token="…", unk_token="…") for c in label]
         for label in labels
     ]
     return texts, label_texts
 
 
 def get_test_examples(
-    texts: List[str],
-    label_texts: List[str],
+    texts: List[List[str]],
+    label_texts: List[List[str]],
     context_len: int,
     tokenizer,
 ) -> List[Dict[str, torch.Tensor]]:
@@ -91,35 +105,53 @@ def get_test_examples(
 
     The sequences will be tokenized in blocks of `context_len` characters.
     """
-    input_encoding: Dict[str, torch.Tensor] = tokenizer(
-        texts,
-        add_special_tokens=True,
-        padding="max_length",
-        truncation=True,
-        max_length=context_len,
-        return_tensors="pt",
-    )
+    assert len(texts) == len(label_texts)
+    # Split sequences (`texts` and `label_texts`) into chunks
+    # of a length of `context_len`, then remove those without mask.
+    print(f"# test examples before chunking: {len(texts)}")
+
+    chunked_texts = []
+    chunked_label_texts = []
+    chunk_size = context_len - 2  # 2 for [CLS] and [SEP]
+    for text, label_text in zip(texts, label_texts):
+        if len(text) != len(label_text):
+            print(
+                f"Lengths of texts and label_texts must be the same"
+                f"but got {len(text)} and {len(label_text)}."
+            )
+            print(text, label_text)
+            exit()
+        for i in range(0, len(text), chunk_size):
+            chunk = text[i : i + chunk_size]
+            if "[MASK]" not in chunk:
+                continue
+            label_chunk = label_text[i : i + chunk_size]
+            chunked_texts.append("".join(chunk))
+            chunked_label_texts.append("".join(label_chunk))
+    print(f"# test examples after chunking: {len(chunked_texts)}")
+    print("====== Test examples ======")
+    for i in range(5):
+        print(i, "---", chunked_texts[i], "---", chunked_label_texts[i])
+    print("===========================")
+
+    def tokenize(texts):
+        return tokenizer(
+            texts,
+            add_special_tokens=True,
+            truncation=True,
+            max_length=context_len,
+            return_tensors="pt",
+            padding="max_length",
+        )
+
+    input_encoding = tokenize(chunked_texts)
     input_ids = input_encoding["input_ids"]
     att_mask = input_encoding["attention_mask"]
-    label_ids: torch.Tensor = tokenizer(
-        label_texts,
-        add_special_tokens=True,
-        padding="max_length",
-        truncation=True,
-        max_length=context_len,
-        return_tensors="pt",
-    )["input_ids"]
-
-    # Remove blocks without any [MASK]
-    maskless_indices = torch.where(input_ids == tokenizer.mask_token_id)
-    print(input_ids[:3])
-    print(label_ids[:3])
-    print("mask id:", tokenizer.mask_token_id)
-    print("maskless_indices:", maskless_indices)
-    exit()
+    label_ids = tokenize(chunked_label_texts)["input_ids"]
 
     # Make padding ignored by the loss function (set to -100)
-    label_ids[label_ids == 1] = -100
+    mask_id = tokenizer.mask_token_id
+    label_ids[input_ids != mask_id] = -100
     num_examples = label_ids.shape[0]
     examples = [
         {

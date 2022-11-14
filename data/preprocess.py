@@ -57,8 +57,8 @@ def split(seqs: list):
 
 
 def create_test_examples(
-    seqs: List[List[str]], 
-    mask_rate=0.15, 
+    seqs: List[List[str]],
+    mask_rate=0.15,
     min_cnt: int = 1,
 ):
     '''
