@@ -12,9 +12,8 @@ from utils import dump_json, load_json
 
 
 def load_vocab() -> List[str]:
-    glyphs_to_count_file = "../data/glyphs_k-0/glyph_to_count_sorted.json"
-    vocab = load_json(glyphs_to_count_file)
-    return list(vocab.keys())
+    glyphs_to_count_file = "./small_vocab.json"
+    return load_json(glyphs_to_count_file)
 
 
 def main():

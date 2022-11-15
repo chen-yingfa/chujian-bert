@@ -35,7 +35,7 @@ def load_train_texts(
     texts = load_jsonl(texts_path)
     print(f"Loaded {len(texts)} sequences.")
     texts = [
-        [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
+        [parse_label(c, False, unk_token="…") for c in seq]
         for seq in texts
     ]
     return texts
@@ -52,11 +52,11 @@ def load_test_texts(path: Path):
     # Don't join glyphs into a string because we need to
     # know the number of glyphs in each sequence.
     texts = [
-        [parse_label(c, True, comb_token="…", unk_token="…") for c in seq]
+        [parse_label(c, False, unk_token="…") for c in seq]
         for seq in seqs
     ]
     label_texts = [
-        [parse_label(c, True, comb_token="…", unk_token="…") for c in label]
+        [parse_label(c, False, unk_token="…") for c in label]
         for label in labels
     ]
     return texts, label_texts
