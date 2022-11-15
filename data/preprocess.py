@@ -53,8 +53,8 @@ def get_sequences(meta_file: Path) -> list:
 def split(seqs: list):
     random.shuffle(seqs)
     split_idx = [int(len(seqs) * 0.9), int(len(seqs) * 0.95)]
-    train = seqs[:split_idx[0]]
-    dev = seqs[split_idx[0]:split_idx[1]]
+    train = seqs[: split_idx[0]]
+    dev = seqs[split_idx[0]: split_idx[1]]
     test = seqs[split_idx[1]:]
     return train, dev, test
 
@@ -80,7 +80,9 @@ def create_test_examples(
         label = seq[:]  # The unmasked sequence is the label.
         n = len(seq)
         indices = list(range(n))
-        mask_indices = random.sample(indices, max(min_cnt, round(n * mask_rate)))
+        mask_indices = random.sample(
+            indices, max(min_cnt, round(n * mask_rate))
+        )
         num_masks += len(mask_indices)
         num_tokens += n
         for idx in mask_indices:

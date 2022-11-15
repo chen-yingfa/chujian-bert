@@ -12,7 +12,7 @@ def chunk_list(lst: List, chunk_size: int) -> List[List]:
     """
     Split a list into chunks of size `chunk_size`.
     """
-    return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
+    return [lst[i: i + chunk_size] for i in range(0, len(lst), chunk_size)]
 
 
 def chunk_2d_list(lst: List[List], chunk_size: int) -> List[List]:
@@ -35,8 +35,7 @@ def load_train_texts(
     texts = load_jsonl(texts_path)
     print(f"Loaded {len(texts)} sequences.")
     texts = [
-        [parse_label(c, False, unk_token="…") for c in seq]
-        for seq in texts
+        [parse_label(c, False, unk_token="…") for c in seq] for seq in texts
     ]
     return texts
 
@@ -52,8 +51,7 @@ def load_test_texts(path: Path):
     # Don't join glyphs into a string because we need to
     # know the number of glyphs in each sequence.
     texts = [
-        [parse_label(c, False, unk_token="…") for c in seq]
-        for seq in seqs
+        [parse_label(c, False, unk_token="…") for c in seq] for seq in seqs
     ]
     label_texts = [
         [parse_label(c, False, unk_token="…") for c in label]
@@ -78,9 +76,7 @@ class ChujianMLMDataset(Dataset):
         if is_training:
             """Assume that the texts are a list of strings"""
             self.texts = load_train_texts(data_path)
-            self.examples = self.get_train_examples(
-                self.texts, self.tokenizer, self.context_len
-            )
+            self.examples = self.get_train_examples(self.texts)
         else:
             # For evaluation
             self.texts, self.label_texts = load_test_texts(data_path)
@@ -119,10 +115,10 @@ class ChujianMLMDataset(Dataset):
                 print(text, label_text)
                 exit()
             for i in range(0, len(text), chunk_size):
-                chunk = text[i : i + chunk_size]
+                chunk = text[i: i + chunk_size]
                 if "[MASK]" not in chunk:
                     continue
-                label_chunk = label_text[i : i + chunk_size]
+                label_chunk = label_text[i: i + chunk_size]
                 chunked_texts.append("".join(chunk))
                 chunked_label_texts.append("".join(label_chunk))
         print(f"# test examples after chunking: {len(chunked_texts)}")
@@ -218,7 +214,7 @@ class ChujianMLMDatasetSmallVocab(Dataset):
         self.sep_token_id = self.token_to_id["[SEP]"]
         self.mask_token_id = self.token_to_id["[MASK]"]
 
-        dump_json(self.vocab, 'small_vocab.json')
+        dump_json(self.vocab, "small_vocab.json")
         self.examples = self.get_examples()
 
     def get_examples(self) -> List[Dict[str, List]]:
@@ -284,7 +280,8 @@ class ChujianMLMDatasetSmallVocab(Dataset):
                     labels[i] = -100
 
             input_ids, attention_mask, labels = self.add_special_tokens(
-                input_ids, labels)
+                input_ids, labels
+            )
             input_ids = torch.tensor(input_ids, dtype=torch.long)
             attention_mask = torch.tensor(attention_mask, dtype=torch.long)
             labels = torch.tensor(labels, dtype=torch.long)
@@ -317,7 +314,8 @@ class ChujianMLMDatasetSmallVocab(Dataset):
 
             # Add special tokens: CLS, SEP and PAD
             input_ids, attention_mask, labels = self.add_special_tokens(
-                input_ids, labels)
+                input_ids, labels
+            )
 
             input_ids = torch.tensor(input_ids, dtype=torch.long)
             attention_mask = torch.tensor(attention_mask, dtype=torch.long)
@@ -328,9 +326,9 @@ class ChujianMLMDatasetSmallVocab(Dataset):
             # exit()
 
             return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
-                'labels': labels,
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "labels": labels,
             }
         else:
             return self.examples[i]

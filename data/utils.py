@@ -31,14 +31,14 @@ def parse_label(
             if label[i] == "(":
                 # "（*）"
                 if label[i] == "(":
-                    if label[i + 1 : -1] == "○":
+                    if label[i + 1: -1] == "○":
                         label = label[:i]
                     else:
-                        label = label[i + 1 : -1]
+                        label = label[i + 1: -1]
                 else:
                     # "*}（*）"
                     if label[i - 1] == "}":
-                        label = label[i + 1 : -1]
+                        label = label[i + 1: -1]
                     # "A（*）" -> "A"
                     else:
                         label = label[0]
