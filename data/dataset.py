@@ -277,6 +277,11 @@ class ChujianMLMDatasetSmallVocab(Dataset):
                 self.token_to_id.get(token, self.unk_token_id)
                 for token in label_text
             ]
+            # Set all labels to -100 except for [MASK], because we only
+            # care about the accuracy on [MASK] tokens.
+            for i, input_id in enumerate(input_ids):
+                if input_id != self.mask_token_id:
+                    labels[i] = -100
 
             input_ids, attention_mask, labels = self.add_special_tokens(
                 input_ids, labels)

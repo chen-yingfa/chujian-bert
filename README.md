@@ -27,5 +27,5 @@ Model:
 
 | Model | top-1 acc | top-3 acc | top-5 acc | top-10 acc |
 | --- | --- | --- | --- | --- |
-| BERT randomly initialized | 86.06 | 88.37 | 88.83 | 89.68 | 
-| BERT pretrained on classical Chinese texts | 
+| BERT randomly initialized | 7.88 | 13.64 | 15.89 | 21.28 |
+| BERT-Large (pretrained) | 12.61 | 18.13 | 21.39 | 26.27 |

@@ -23,8 +23,8 @@ def main():
     # TEXTS_PATH = Path(
     # '/data/private/chenyingfa/chujian/sequences/seq_texts.json')
     # TEXTS_PATH = Path('../data/sequences/seq_texts.json')
-    TRAIN_PATH = Path("../data/sequences/train.jsonl")
-    TEST_PATH = Path("../data/sequences/test.jsonl")
+    TRAIN_PATH = Path("../data/text/train.jsonl")
+    TEST_PATH = Path("../data/text/test.jsonl")
 
     print("(Randomly) Initializing model...")
     config = BertConfig.from_pretrained("configs/roberta-base-config.json")
@@ -34,8 +34,8 @@ def main():
     print(f"Number of trainable parameters: {num_params}")
 
     # Hyperparameters
-    num_epochs = 8
-    lr = 5e-5
+    num_epochs = 4
+    lr = 1e-6
     batch_size = 128
     log_interval = 10
     mode = "train_test"
@@ -43,7 +43,6 @@ def main():
     # Output
     output_dir = Path(
         "result",
-        # "temp",
         "bert_rand_init",
         f"lr{lr}-bs{batch_size}-ep{num_epochs}",
     )
